@@ -1176,10 +1176,15 @@ public class BleModule implements BleAdapter {
       .build();
 
     int length = uuids == null ? 0 : uuids.length;
-    ScanFilter[] filters = new ScanFilter[length];
+    ScanFilter[] filters = new ScanFilter[length + 1];
     for (int i = 0; i < length; i++) {
       filters[i] = new ScanFilter.Builder().setServiceUuid(ParcelUuid.fromString(uuids[i].toString())).build();
     }
+
+    // https://stackoverflow.com/questions/48077690/ble-scan-is-not-working-when-screen-is-off-on-android-8-1-0
+    // https://android.googlesource.com/platform/packages/apps/Bluetooth/+/319aeae6f4ebd13678b4f77375d1804978c4a1e1
+    filters[length] = new ScanFilter.Builder().setManufacturerData(0x09E1, new byte[] {}).build();
+
 
     scanSubscription = rxBleClient
       .scanBleDevices(scanSettings, filters)
