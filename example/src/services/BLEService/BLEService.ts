@@ -33,6 +33,11 @@ class BLEServiceInstance {
     this.manager.setLogLevel(LogLevel.Verbose)
   }
 
+  createNewManager = () => {
+    this.manager = new BleManager()
+    this.manager.setLogLevel(LogLevel.Verbose)
+  }
+
   getDevice = () => this.device
 
   initializeBLE = () =>
@@ -59,6 +64,8 @@ class BLEServiceInstance {
             break
           default:
             console.error('Unsupported state: ', state)
+          // resolve()
+          // subscription.remove()
         }
       }, true)
     })
@@ -93,24 +100,31 @@ class BLEServiceInstance {
   }
 
   scanDevices = async (onDeviceFound: (device: Device) => void, UUIDs: UUID[] | null = null, legacyScan?: boolean) => {
-    this.manager.startDeviceScan(UUIDs, { legacyScan }, (error, device) => {
-      if (error) {
-        this.onError(error)
-        console.error(error.message)
-        this.manager.stopDeviceScan()
-        return
-      }
-      if (device) {
-        onDeviceFound(device)
-      }
-    })
+    this.manager
+      .startDeviceScan(UUIDs, { legacyScan }, (error, device) => {
+        if (error) {
+          this.onError(error)
+          console.error(error.message)
+          this.manager.stopDeviceScan()
+          return
+        }
+        if (device) {
+          onDeviceFound(device)
+        }
+      })
+      .then(() => {})
+      .catch(console.error)
   }
 
-  connectToDevice = (deviceId: DeviceId) =>
+  stopDeviceScan = () => {
+    this.manager.stopDeviceScan()
+  }
+
+  connectToDevice = (deviceId: DeviceId, timeout?: number, ignoreError = false) =>
     new Promise<Device>((resolve, reject) => {
       this.manager.stopDeviceScan()
       this.manager
-        .connectToDevice(deviceId)
+        .connectToDevice(deviceId, { timeout })
         .then(device => {
           this.device = device
           resolve(device)
@@ -119,7 +133,9 @@ class BLEServiceInstance {
           if (error.errorCode === BleErrorCode.DeviceAlreadyConnected && this.device) {
             resolve(this.device)
           } else {
-            this.onError(error)
+            if (!ignoreError) {
+              this.onError(error)
+            }
             reject(error)
           }
         })
@@ -400,10 +416,10 @@ class BLEServiceInstance {
     if (Platform.OS === 'ios') {
       return true
     }
-    if (Platform.OS === 'android' && PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION) {
+    if (Platform.OS === 'android') {
       const apiLevel = parseInt(Platform.Version.toString(), 10)
 
-      if (apiLevel < 31) {
+      if (apiLevel < 31 && PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION) {
         const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION)
         return granted === PermissionsAndroid.RESULTS.GRANTED
       }

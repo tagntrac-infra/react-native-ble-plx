@@ -27,6 +27,7 @@ It does NOT support:
 - bluetooth classic devices.
 - communicating between phones using BLE (Peripheral support)
 - [bonding peripherals](https://github.com/dotintent/react-native-ble-plx/wiki/Device-Bonding)
+- [beacons](https://github.com/dotintent/react-native-ble-plx/wiki/=-FAQ:-Beacons)
 
 ## Table of Contents
 
@@ -42,20 +43,23 @@ It does NOT support:
 For old RN versions (<0.60) please check [old README](./docs/README_V1.md) (1.x)
 for the old instructions or [migration guide](./docs/MIGRATION_V1.md).
 
-| React Native | 3.1.1              |
+| React Native | 3.1.2              |
 | ------------ | ------------------ |
-| 0.72.4       | :white_check_mark: |
-| 0.71.13      | :white_check_mark: |
-| 0.70.13      | :white_check_mark: |
+| 0.74.1       | :white_check_mark: |
+| 0.69.6       | :white_check_mark: |
+| Expo 51      | :white_check_mark: |
 
 ## Recent Changes
 
-**3.1.1**
+**3.2.0**
 
-- Fixed expo config plugin for prebuilding
+- Added Android Instance checking before calling its method, an error will be visible on the RN side
+- Added information related to Android 14 to the documentation.
+- Changed destroyClient, cancelTransaction, setLogLevel, startDeviceScan, stopDeviceScan calls to promises to allow error reporting if it occurs.
+- Fixed one of the functions calls that clean up the BLE instance after it is destroyed.
 
 [Current version changes](CHANGELOG.md)
-[All previous changes](CHANGELOG-pre-03.md)
+[All previous changes](CHANGELOG-pre-3.0.0.md)
 
 ## Documentation & Support
 
@@ -108,7 +112,7 @@ The plugin provides props for extra customization. Every time you change the pro
   "expo": {
     "plugins": [
       [
-        "@config-plugins/react-native-ble-plx",
+        "react-native-ble-plx",
         {
           "isBackgroundEnabled": true,
           "modes": ["peripheral", "central"],

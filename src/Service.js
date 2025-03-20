@@ -6,7 +6,16 @@ import type { BleError } from './BleError'
 import type { Characteristic } from './Characteristic'
 import type { Descriptor } from './Descriptor'
 import type { NativeService } from './BleModule'
-import type { DeviceId, Identifier, Base64, UUID, Subscription, TransactionId } from './TypeDefinition'
+import type {
+  DeviceId,
+  Identifier,
+  Base64,
+  UUID,
+  Subscription,
+  TransactionId,
+  CharacteristicSubscriptionType
+} from './TypeDefinition'
+import { isIOS } from './Utils'
 
 /**
  * Service object.
@@ -43,7 +52,8 @@ export class Service implements NativeService {
    * @ignore
    */
   constructor(nativeService: NativeService, manager: BleManager) {
-    Object.assign(this, nativeService, { _manager: manager })
+    Object.assign(this, nativeService)
+    Object.defineProperty(this, '_manager', { value: manager, enumerable: false })
   }
 
   /**
@@ -133,15 +143,20 @@ export class Service implements NativeService {
    * @param {function(error: ?BleError, characteristic: ?Characteristic)} listener callback which emits
    * {@link Characteristic} objects with modified value for each notification.
    * @param {?TransactionId} transactionId optional `transactionId` which can be used in
+   * @param {?CharacteristicSubscriptionType} subscriptionType [android only] subscription type of the characteristic
    * {@link #blemanagercanceltransaction|bleManager.cancelTransaction()} function.
    * @returns {Subscription} Subscription on which `remove()` function can be called to unsubscribe.
    */
   monitorCharacteristic(
     characteristicUUID: UUID,
     listener: (error: ?BleError, characteristic: ?Characteristic) => void,
-    transactionId: ?TransactionId
+    transactionId: ?TransactionId,
+    subscriptionType: ?CharacteristicSubscriptionType
   ): Subscription {
-    return this._manager._monitorCharacteristicForService(this.id, characteristicUUID, listener, transactionId)
+    const commonArgs = [this.id, characteristicUUID, listener, transactionId]
+    const args = isIOS ? commonArgs : [...commonArgs, subscriptionType]
+
+    return this._manager._monitorCharacteristicForService(...args)
   }
 
   /**

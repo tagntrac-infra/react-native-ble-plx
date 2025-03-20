@@ -27,6 +27,11 @@ declare module 'react-native-ble-plx' {
   export type TransactionId = string
 
   /**
+   * Characteritic subscription type.
+   */
+  export type CharacteristicSubscriptionType = 'notification' | 'indication'
+
+  /**
    * Subscription
    * @interface
    */
@@ -791,6 +796,13 @@ declare module 'react-native-ble-plx' {
     manufacturerData: Base64 | null
 
     /**
+     * Raw device scan data. When you have specific advertiser data,
+     * you can implement your own processing.
+     * @private
+     */
+    rawScanRecord: Base64
+
+    /**
      * Map od service UUIDs with associated data.
      * @private
      */
@@ -1014,17 +1026,19 @@ declare module 'react-native-ble-plx' {
     /**
      * Destroys {@link BleManager} instance. A new instance needs to be created to continue working with
      * this library. All operations which were in progress completes with
+     * @returns {Promise<void>}
      * {@link #bleerrorcodebluetoothmanagerdestroyed|BluetoothManagerDestroyed} error code.
      */
-    destroy(): void
+    destroy(): Promise<void>;
 
     // Mark: Common ----------------------------------------------------------------------------------------------------
 
     /**
      * Sets new log level for native module's logging mechanism.
      * @param {LogLevel} logLevel New log level to be set.
+     * @returns {Promise<LogLevel>} Current log level.
      */
-    setLogLevel(logLevel: LogLevel): void
+    setLogLevel(logLevel: LogLevel): Promise<LogLevel>
 
     /**
      * Get current log level for native module's logging mechanism.
@@ -1055,8 +1069,9 @@ declare module 'react-native-ble-plx' {
      * setTimeout(() => manager.cancelTransaction(transactionId), 2000);
      *
      * @param {TransactionId} transactionId Id of pending transactions.
+     * @returns {Promise<void>}
      */
-    cancelTransaction(transactionId: TransactionId): void
+    cancelTransaction(transactionId: TransactionId): Promise<void>
 
     // Mark: Monitoring state ------------------------------------------------------------------------------------------
 
@@ -1115,17 +1130,19 @@ declare module 'react-native-ble-plx' {
      * {@link Device} (devices may be scanned multiple times). It's first argument is potential {@link Error} which is set
      * to non `null` value when scanning failed. You have to start scanning process again if that happens. Second argument
      * is a scanned {@link Device}.
+     * @returns {Promise<void>} the promise may be rejected if the operation is impossible to perform.
      */
     startDeviceScan(
       UUIDs: UUID[] | null,
       options: ScanOptions | null,
       listener: (error: BleError | null, scannedDevice: Device | null) => void
-    ): void
+    ): Promise<void>
 
     /**
      * Stops {@link Device} scan if in progress.
+     * @returns {Promise<void>} the promise may be rejected if the operation is impossible to perform.
      */
-    stopDeviceScan(): void
+    stopDeviceScan(): Promise<void>
 
     /**
      * Request a connection parameter update. This functions may update connection parameters on Android API level 21 or
@@ -1153,11 +1170,13 @@ declare module 'react-native-ble-plx' {
 
     /**
      * Request new MTU value for this device. This function currently is not doing anything
-     * on iOS platform as MTU exchange is done automatically.
+     * on iOS platform as MTU exchange is done automatically. Since Android 14,
+     * mtu management has been changed, more information can be found at the link:
+     * https://developer.android.com/about/versions/14/behavior-changes-all#mtu-set-to-517
      * @param {DeviceId} deviceIdentifier Device identifier.
      * @param {number} mtu New MTU to negotiate.
      * @param {?TransactionId} transactionId Transaction handle used to cancel operation
-     * @returns {Promise<Device>} Device with updated MTU size. Default value is 23.
+     * @returns {Promise<Device>} Device with updated MTU size. Default value is 23 (517 since Android 14).
      */
     requestMTUForDevice(deviceIdentifier: DeviceId, mtu: number, transactionId?: TransactionId): Promise<Device>
 
@@ -1341,6 +1360,7 @@ declare module 'react-native-ble-plx' {
      * @param {function(error?: BleError, characteristic?: Characteristic)} listener - callback which emits
      * {@link Characteristic} objects with modified value for each notification.
      * @param {?TransactionId} transactionId optional `transactionId` which can be used in
+     * @param {?CharacteristicSubscriptionType} subscriptionType [android only] subscription type of the characteristic
      * {@link #blemanagercanceltransaction|cancelTransaction()} function.
      * @returns {Subscription} Subscription on which `remove()` function can be called to unsubscribe.
      */
@@ -1349,7 +1369,8 @@ declare module 'react-native-ble-plx' {
       serviceUUID: UUID,
       characteristicUUID: UUID,
       listener: (error: BleError | null, characteristic: Characteristic | null) => void,
-      transactionId?: TransactionId
+      transactionId?: TransactionId,
+      subscriptionType?: CharacteristicSubscriptionType
     ): Subscription
 
     // Mark: Descriptors operations ----------------------------------------------------------------------------------
@@ -1429,6 +1450,12 @@ declare module 'react-native-ble-plx' {
      * Device's custom manufacturer data. Its format is defined by manufacturer.
      */
     manufacturerData: Base64 | null
+
+    /**
+     * Raw device scan data. When you have specific advertiser data,
+     * you can implement your own processing.
+     */
+    rawScanRecord: Base64
 
     /**
      * Map of service UUIDs (as keys) with associated data (as values).
@@ -1627,6 +1654,7 @@ declare module 'react-native-ble-plx' {
      * @param {function(error: ?BleError, characteristic: ?Characteristic)} listener - callback which emits
      * {@link Characteristic} objects with modified value for each notification.
      * @param {?TransactionId} transactionId optional `transactionId` which can be used in
+     * @param {?CharacteristicSubscriptionType} subscriptionType [android only] subscription type of the characteristic
      * {@link #blemanagercanceltransaction|bleManager.cancelTransaction()} function.
      * @returns {Subscription} Subscription on which `remove()` function can be called to unsubscribe.
      */
@@ -1634,7 +1662,8 @@ declare module 'react-native-ble-plx' {
       serviceUUID: UUID,
       characteristicUUID: UUID,
       listener: (error: BleError | null, characteristic: Characteristic | null) => void,
-      transactionId?: TransactionId
+      transactionId?: TransactionId,
+      subscriptionType?: CharacteristicSubscriptionType
     ): Subscription
 
     /**
@@ -1777,13 +1806,15 @@ declare module 'react-native-ble-plx' {
      * @param {function(error?: BleError, characteristic?: Characteristic)} listener callback which emits
      * {@link Characteristic} objects with modified value for each notification.
      * @param {?TransactionId} transactionId optional `transactionId` which can be used in
+     * @param {?CharacteristicSubscriptionType} subscriptionType [android only] subscription type of the characteristic
      * {@link #blemanagercanceltransaction|bleManager.cancelTransaction()} function.
      * @returns {Subscription} Subscription on which `remove()` function can be called to unsubscribe.
      */
     monitorCharacteristic(
       characteristicUUID: UUID,
       listener: (error: BleError | null, characteristic: Characteristic | null) => void,
-      transactionId?: string
+      transactionId?: string,
+      subscriptionType?: CharacteristicSubscriptionType
     ): Subscription
 
     /**
@@ -1939,12 +1970,14 @@ declare module 'react-native-ble-plx' {
      * @param {function(error?: BleError, characteristic?: Characteristic)} listener callback which emits
      * this {@link Characteristic} with modified value for each notification.
      * @param {?TransactionId} transactionId optional `transactionId` which can be used in
+     * @param {?CharacteristicSubscriptionType} subscriptionType [android only] subscription type of the characteristic
      * {@link #blemanagercanceltransaction|bleManager.cancelTransaction()} function.
      * @returns {Subscription} Subscription on which `remove()` function can be called to unsubscribe.
      */
     monitor(
       listener: (error: BleError | null, characteristic: Characteristic | null) => void,
-      transactionId?: string
+      transactionId?: string,
+      subscriptionType?: CharacteristicSubscriptionType
     ): Subscription
 
     /**

@@ -35,6 +35,7 @@ import com.bleplx.adapter.utils.ServiceFactory;
 import com.bleplx.adapter.utils.UUIDConverter;
 import com.bleplx.adapter.utils.mapper.RxBleDeviceToDeviceMapper;
 import com.bleplx.adapter.utils.mapper.RxScanResultToScanResultMapper;
+import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.polidea.rxandroidble2.NotificationSetupMode;
 import com.polidea.rxandroidble2.RxBleAdapterStateObservable;
 import com.polidea.rxandroidble2.RxBleClient;
@@ -56,7 +57,8 @@ import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Action;
 import io.reactivex.schedulers.Schedulers;
 
-public class BleModule implements BleAdapter {
+public class BleModule extends ReactContextBaseJavaModule implements BleAdapter {
+  public static final String NAME = "Ble";
 
   private final ErrorConverter errorConverter = new ErrorConverter();
 
@@ -99,6 +101,12 @@ public class BleModule implements BleAdapter {
 
   private int currentLogLevel = RxBleLog.NONE;
 
+  @Override
+  @NonNull
+  public String getName() {
+    return NAME;
+  }
+
   public BleModule(Context context) {
     this.context = context;
     bluetoothManager = (BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE);
@@ -118,6 +126,15 @@ public class BleModule implements BleAdapter {
     }
   }
 
+  private void clearActiveConnections() {
+    pendingTransactions.removeAllSubscriptions();
+    connectingDevices.removeAllSubscriptions();
+    connectedDevices.clear();
+    activeConnections.clear();
+    discoveredDevices.clear();
+
+  }
+
   @Override
   public void destroyClient() {
     if (adapterStateChangesSubscription != null) {
@@ -128,15 +145,10 @@ public class BleModule implements BleAdapter {
       scanSubscription.dispose();
       scanSubscription = null;
     }
-    pendingTransactions.removeAllSubscriptions();
-    connectingDevices.removeAllSubscriptions();
-
+    clearActiveConnections();
     discoveredServices.clear();
     discoveredCharacteristics.clear();
     discoveredDescriptors.clear();
-    connectedDevices.clear();
-    activeConnections.clear();
-    discoveredDevices.clear();
 
     rxBleClient = null;
     IdGenerator.clear();
@@ -677,6 +689,7 @@ public class BleModule implements BleAdapter {
                                              String serviceUUID,
                                              String characteristicUUID,
                                              String transactionId,
+                                             String subscriptionType,
                                              OnEventCallback<Characteristic> onEventCallback,
                                              OnErrorCallback onErrorCallback) {
     final Characteristic characteristic = getCharacteristicOrEmitError(
@@ -685,13 +698,14 @@ public class BleModule implements BleAdapter {
       return;
     }
 
-    safeMonitorCharacteristicForDevice(characteristic, transactionId, onEventCallback, onErrorCallback);
+    safeMonitorCharacteristicForDevice(characteristic, transactionId, subscriptionType, onEventCallback, onErrorCallback);
   }
 
   @Override
   public void monitorCharacteristicForService(int serviceIdentifier,
                                               String characteristicUUID,
                                               String transactionId,
+                                              String subscriptionType,
                                               OnEventCallback<Characteristic> onEventCallback,
                                               OnErrorCallback onErrorCallback) {
     final Characteristic characteristic = getCharacteristicOrEmitError(
@@ -700,11 +714,11 @@ public class BleModule implements BleAdapter {
       return;
     }
 
-    safeMonitorCharacteristicForDevice(characteristic, transactionId, onEventCallback, onErrorCallback);
+    safeMonitorCharacteristicForDevice(characteristic, transactionId, subscriptionType, onEventCallback, onErrorCallback);
   }
 
   @Override
-  public void monitorCharacteristic(int characteristicIdentifier, String transactionId,
+  public void monitorCharacteristic(int characteristicIdentifier, String transactionId, String subscriptionType,
                                     OnEventCallback<Characteristic> onEventCallback,
                                     OnErrorCallback onErrorCallback) {
     final Characteristic characteristic = getCharacteristicOrEmitError(characteristicIdentifier, onErrorCallback);
@@ -712,7 +726,7 @@ public class BleModule implements BleAdapter {
       return;
     }
 
-    safeMonitorCharacteristicForDevice(characteristic, transactionId, onEventCallback, onErrorCallback);
+    safeMonitorCharacteristicForDevice(characteristic, transactionId, subscriptionType, onEventCallback, onErrorCallback);
   }
 
   @Override
@@ -1232,7 +1246,7 @@ public class BleModule implements BleAdapter {
     Observable<RxBleConnection> connect = device
       .establishConnection(autoConnect)
       .doOnSubscribe(disposable -> onConnectionStateChangedCallback.onEvent(ConnectionState.CONNECTING))
-      .doOnDispose(() -> {
+      .doFinally(() -> {
         safeExecutor.error(BleErrorUtils.cancelled());
         onDeviceDisconnected(device);
         onConnectionStateChangedCallback.onEvent(ConnectionState.DISCONNECTED);
@@ -1260,7 +1274,10 @@ public class BleModule implements BleAdapter {
     }
 
     if (timeout != null) {
-      connect = connect.timeout(timeout, TimeUnit.MILLISECONDS);
+      connect = connect.timeout(
+        Observable.timer(timeout, TimeUnit.MILLISECONDS),
+        item -> Observable.never()
+      );
     }
 
 
@@ -1429,6 +1446,7 @@ public class BleModule implements BleAdapter {
 
   private void safeMonitorCharacteristicForDevice(final Characteristic characteristic,
                                                   final String transactionId,
+                                                  final String subscriptionType,
                                                   final OnEventCallback<Characteristic> onEventCallback,
                                                   final OnErrorCallback onErrorCallback) {
     final RxBleConnection connection = getConnectionOrEmitError(characteristic.getDeviceId(), onErrorCallback);
@@ -1443,12 +1461,15 @@ public class BleModule implements BleAdapter {
         NotificationSetupMode setupMode = cccDescriptor != null
           ? NotificationSetupMode.QUICK_SETUP
           : NotificationSetupMode.COMPAT;
-        if (characteristic.isNotifiable()) {
-          return connection.setupNotification(characteristic.gattCharacteristic, setupMode);
-        }
-
-        if (characteristic.isIndicatable()) {
-          return connection.setupIndication(characteristic.gattCharacteristic, setupMode);
+        
+        if ("notification".equals(subscriptionType) && characteristic.isNotifiable()) {
+            return connection.setupNotification(characteristic.gattCharacteristic, setupMode);
+        } else if ("indication".equals(subscriptionType) && characteristic.isIndicatable()) {
+            return connection.setupIndication(characteristic.gattCharacteristic, setupMode);
+        } else if (characteristic.isNotifiable()) {
+            return connection.setupNotification(characteristic.gattCharacteristic, setupMode);
+        } else if (characteristic.isIndicatable()) {
+            return connection.setupIndication(characteristic.gattCharacteristic, setupMode);
         }
 
         return Observable.error(new CannotMonitorCharacteristicException(characteristic));
@@ -1570,5 +1591,10 @@ public class BleModule implements BleAdapter {
         discoveredDescriptors.remove(key);
       }
     }
+  }
+
+  @Override
+  public void invalidate() {
+    clearActiveConnections();
   }
 }
